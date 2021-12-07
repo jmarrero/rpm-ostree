@@ -115,6 +115,10 @@ pub(crate) fn is_rpm_arg(arg: &str) -> bool {
     arg.ends_with(".rpm") || arg.starts_with("file://")
 }
 
+pub(crate) fn is_src_rpm_arg(arg: &str) -> bool {
+    arg.ends_with("src.rpm")
+}
+
 /// Given a string from the command line, determine if it represents one or more
 /// RPM URLs we need to fetch, and if so download those URLs and return file
 /// descriptors for the content.
@@ -125,7 +129,9 @@ pub(crate) fn client_handle_fd_argument(arg: &str, arch: &str) -> CxxResult<Vec<
         return Ok(fds.into_iter().map(|f| f.into_raw_fd()).collect());
     }
 
-    if is_http_arg(arg) {
+    if is_src_rpm_arg(arg) {
+        return Err(anyhow!("src.rpm detected, please provide a valid rpm file for: {}", arg));
+    } else if is_http_arg(arg) {
         Ok(utils::download_url_to_tmpfile(arg, true).map(|f| vec![f.into_raw_fd()])?)
     } else if is_rpm_arg(arg) {
         match arg.strip_prefix("file://") {
