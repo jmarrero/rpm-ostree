@@ -281,6 +281,20 @@ _rpm_ostree_package_list_for_commit (OstreeRepo   *repo,
   return TRUE;
 }
 
+/* Use rpm_ostree_package_get_arch to detect src.rpms and throw an error
+ * if rpm-ostree is passed a src.rpm.
+ *
+ */
+gboolean
+_rpm_ostree_package_detect_src_rpm (RpmOstreePackage *p,
+                                     GError      **error)
+{
+  if (strcmp(rpm_ostree_package_get_arch(p), "src") == 0)
+    return glnx_throw (error, "src.rpm detected, please provide a valid rpm file.");
+  else
+    return FALSE;
+}
+
 static inline gboolean
 next_pkg_has_different_name (const char *name, GPtrArray *pkgs, guint cur_i)
 {
