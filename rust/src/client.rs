@@ -130,7 +130,7 @@ pub(crate) fn client_handle_fd_argument(arg: &str, arch: &str) -> CxxResult<Vec<
     }
 
     if is_src_rpm_arg(arg) {
-        return Err(anyhow!("src.rpm detected, please provide a valid rpm file for: {}", arg));
+        return Err(anyhow!("src.rpm detected, please provide a valid rpm file for: {}", arg).into());
     } else if is_http_arg(arg) {
         Ok(utils::download_url_to_tmpfile(arg, true).map(|f| vec![f.into_raw_fd()])?)
     } else if is_rpm_arg(arg) {
@@ -229,4 +229,18 @@ pub(crate) fn client_render_download_progress(
     } else {
         format!("Scanning metadata: {}", n_scanned_metadata)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_src_rpm() {
+        let rpm = "https://fedora.org/rpms/src/kernel-2.6.1.rpm";
+        let src_rpm = "file://linux-kernel-2.2.2.src.rpm";
+        assert!(!is_src_rpm_arg(rpm));
+        assert!(is_src_rpm_arg(src_rpm));
+    }
+
 }
