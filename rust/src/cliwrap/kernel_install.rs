@@ -16,9 +16,5 @@ use crate::ffi::SystemHostType;
 
 /// Primary entrypoint to running our wrapped `kernel-install` handling.
 pub(crate) fn main(hosttype: SystemHostType, argv: &[&str]) -> Result<()> {
-    if ostree_ext::container_utils::is_ostree_container()? {
-        Err(anyhow!("not implemented--> kernel-install called IN ostree container..."))
-    } else {
-        Err(anyhow!("not implemented--> kernel-install called OUTSIDE ostree container..."))
-    }
+        Ok(())
 }

@@ -29,9 +29,6 @@ pub const CLIWRAP_DESTDIR: &str = "usr/libexec/rpm-ostree/wrapped";
 /// Binaries that will be wrapped if they exist.
 static WRAPPED_BINARIES: &[&str] = &["usr/bin/rpm", "usr/bin/dracut", "usr/sbin/grubby"];
 
-/// Binaries we will wrap, or create if they don't exist.
-static MUSTWRAP_BINARIES: &[&str] = &["usr/bin/yum", "usr/bin/dnf", "usr/bin/kernel-install"];
-
 #[derive(Debug, PartialEq)]
 pub(crate) enum RunDisposition {
     Ok,
@@ -140,11 +137,17 @@ fn write_wrappers(rootfs_dfd: &Dir) -> Result<()> {
     rootfs_dfd.ensure_dir_with(destdir.parent().unwrap(), &dirbuilder)?;
     rootfs_dfd.ensure_dir_with(destdir, &dirbuilder)?;
 
+    /// Binaries we will wrap, or create if they don't exist.
+    let mut must_wrap_binaries: &[&str] = &["usr/bin/yum", "usr/bin/dnf"];
+    if ostree_ext::container_utils::is_ostree_container()? {
+        must_wrap_binaries = &["usr/bin/yum", "usr/bin/dnf", "usr/bin/kernel-install"];
+    }
+
     WRAPPED_BINARIES
         .par_iter()
         .map(|p| (Utf8Path::new(p), true))
         .chain(
-            MUSTWRAP_BINARIES
+            must_wrap_binaries
                 .par_iter()
                 .map(|p| (Utf8Path::new(p), false)),
         )
