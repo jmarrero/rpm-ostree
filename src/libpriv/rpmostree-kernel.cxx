@@ -220,6 +220,17 @@ rpmostree_kernel_remove (int rootfs_dfd, GCancellable *cancellable, GError **err
   return TRUE;
 }
 
+namespace rpmostreecxx
+{
+void
+remove_kernel (gint32 dfd)
+{
+  g_autoptr (GError) local_error = NULL;
+  if (!rpmostree_kernel_remove (dfd, NULL, &local_error))
+    util::throw_gerror (local_error);
+}
+}
+
 /* Given a root filesystem, return a GVariant of format (sssms):
  *  - kver: uname -r equivalent
  *  - bootdir: Path to the boot directory
@@ -568,3 +579,4 @@ rpmostree_run_dracut (int rootfs_dfd, const char *const *argv, const char *kver,
   tmpf.initialized = FALSE; /* Transfer */
   return TRUE;
 }
+

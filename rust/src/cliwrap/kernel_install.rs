@@ -1,9 +1,10 @@
 // If not running on container continue the current path.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use crate::ffi::SystemHostType;
-
+use crate::cxxrsutil::*;
+use std::os::unix::io::AsRawFd;
 
 /// Primary entrypoint to running our wrapped `kernel-install` handling.
 pub(crate) fn main(hosttype: SystemHostType, argv: &[&str]) -> Result<()> {
@@ -12,10 +13,10 @@ pub(crate) fn main(hosttype: SystemHostType, argv: &[&str]) -> Result<()> {
         Ok(())
 }
 
-fn remove_current_kernel() -> Result<()> {
-    //For this will need to expose these functions to rust.
-    //rpmostree_kernel_remove from src/libpriv/rpmostree-kernel.cxx
-    Ok(())
+fn remove_current_kernel() -> CxxResult<()> {
+    //calls rpmostree_kernel_remove from rpmostree-kernel.cxx
+    let rootfs_dfd = openat::Dir::open("/")?;
+    Ok(crate::ffi::remove_kernel(rootfs_dfd.as_raw_fd())?)
 }
 
 fn run_dracut() -> Result<()> {

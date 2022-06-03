@@ -797,6 +797,13 @@ pub mod ffi {
         );
     }
 
+    // rpmostree-kernel.h
+    unsafe extern "C++" {
+        include!("rpmostree-kernel.h");
+        #[allow(missing_debug_implementations)]
+        fn remove_kernel(rootfs_dfd: i32) -> Result<()>;
+    }
+
     unsafe extern "C++" {
         include!("rpmostree-output.h");
         #[allow(missing_debug_implementations)]

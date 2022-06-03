@@ -47,3 +47,8 @@ gboolean rpmostree_run_dracut (int rootfs_dfd, const char *const *argv, const ch
                                GCancellable *cancellable, GError **error);
 
 G_END_DECLS
+
+namespace rpmostreecxx
+{
+void remove_kernel (gint32 dfd);
+}
