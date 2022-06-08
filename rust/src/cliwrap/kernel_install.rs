@@ -5,6 +5,7 @@ use anyhow::{Result};
 use crate::ffi::SystemHostType;
 use crate::cxxrsutil::*;
 use std::os::unix::io::AsRawFd;
+use std::fs;
 
 /// Primary entrypoint to running our wrapped `kernel-install` handling.
 pub(crate) fn main(hosttype: SystemHostType, argv: &[&str]) -> Result<()> {
@@ -14,9 +15,21 @@ pub(crate) fn main(hosttype: SystemHostType, argv: &[&str]) -> Result<()> {
 }
 
 fn remove_current_kernel() -> CxxResult<()> {
-    //calls rpmostree_kernel_remove from rpmostree-kernel.cxx
-    let rootfs_dfd = openat::Dir::open("/")?;
-    Ok(crate::ffi::remove_kernel(rootfs_dfd.as_raw_fd())?)
+    let kernel_dir = "/lib/modules";
+    let kernel_file = "vmlinuz";
+
+    let paths = fs::read_dir(kernel_dir).unwrap();
+
+    for path in paths {
+        let current_path = path.unwrap().path();
+        let file_path = current_path.join(kernel_file);
+        println!("Name: {}", file_path.display());
+        if !fs::metadata(file_path).is_ok() {
+            fs::remove_dir_all(current_path)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn run_dracut() -> Result<()> {
