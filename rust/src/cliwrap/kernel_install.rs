@@ -1,7 +1,9 @@
 // If not running on container continue the current path.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::fs;
+use std::process::Command;
+
 
 /// Primary entrypoint to running our wrapped `kernel-install` handling.
 pub(crate) fn main() -> Result<()> {
@@ -26,15 +28,13 @@ fn remove_current_kernel() -> Result<()> {
 }
 
 fn run_dracut() -> Result<()> {
-    // -> Reimplement the dracut calls in rust
-    // This new code must move the new initramfs to /lib/modules/new-kernel-dir
-    //"#!/usr/bin/bash\n"
-    //"set -euo pipefail\n"
-    //"export PATH=%s:${PATH}\n"
-    //"extra_argv=; if (dracut --help; true) | grep -q -e --reproducible; then "
-    //"extra_argv=\"--reproducible --gzip\"; fi\n"
-    //"mkdir -p /tmp/dracut && dracut $extra_argv -v --add ostree "
-    //"--tmpdir=/tmp/dracut -f /tmp/initramfs.img \"$@\"\n"
-    //"mv /tmp/initramfs.img /lib/modules/NEWKERNEL-DIR
+    fs::create_dir("/tmp/dracut")?;
+    let res = Command::new("/usr/libexec/rpm-ostree/wrapped/dracut")
+        .args(&["--no-hostonly", "--kver", "5.17.11-300.fc36.x86_64", "--reproducible", "-v", "--add", "ostree", "--tmpdir=/tmp/dracut", "-f", "/tmp/initramfs.img"])
+        .status()?;
+    if !res.success() {
+        return Err(anyhow!("#sad"));
+    }
+    fs::rename("/tmp/initramfs.img", "/lib/modules/5.17.11-300.fc36.x86_64/initramfs.img")?;
     Ok(())
 }
