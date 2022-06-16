@@ -25,11 +25,9 @@ pub(crate) fn main() -> Result<()> {
         let initramfs = "initramfs.img";
 
         if entry.file_type()? == FileType::dir() {
-            if modules_path
-                .metadata((kernel_path).join(kernel_binary))
-                .is_ok()
+            if modules_path.exists((kernel_path).join(kernel_binary))
             {
-                if !modules_path.metadata(kernel_path.join(initramfs)).is_ok() {
+                if !modules_path.exists(kernel_path.join(initramfs)) {
                     new_kernel = Some(kernel_dir);
                 } else {
                     new_kernel = None;
@@ -40,8 +38,8 @@ pub(crate) fn main() -> Result<()> {
             }
         }
     }
-    if new_kernel.is_some() {
-        run_dracut(new_kernel.unwrap().as_str())?;
+    if let Some(k) = new_kernel {
+        run_dracut(&k)?;
     }
     Ok(())
 }
