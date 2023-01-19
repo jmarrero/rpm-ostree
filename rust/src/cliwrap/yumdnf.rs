@@ -81,6 +81,10 @@ enum Cmd {
         #[clap(subcommand)]
         cmd: ImageCmd,
     },
+    /// dnf config-manager --add-repo compatibility layer
+    ConfigManager {
+        subargs: Vec<String>,
+    },
 }
 
 /// Switch the booted container image.
@@ -170,6 +174,9 @@ fn run_clean(argv: &Vec<String>) -> Result<RunDisposition> {
     }
 }
 
+fn run_config_manager(argv: &Vec<String>) -> Result<RunDisposition> {
+    }
+
 fn disposition(opt: Opt, hosttype: SystemHostType) -> Result<RunDisposition> {
     let disp = match hosttype {
         SystemHostType::OstreeHost => {
@@ -187,6 +194,9 @@ fn disposition(opt: Opt, hosttype: SystemHostType) -> Result<RunDisposition> {
                 },
                 Cmd::Clean { subargs } => {
                     run_clean(&subargs)?
+                }
+                Cmd::ConfigManager { subargs } => {
+                    run_config_manager(&subargs)?
                 }
                 Cmd::Remove { .. } | Cmd::Uninstall { .. } => RunDisposition::NotImplementedYet("Not implemented yet"),
                 Cmd::Search { .. } => RunDisposition::NotImplementedYet(indoc! { r##"
@@ -248,6 +258,7 @@ fn disposition(opt: Opt, hosttype: SystemHostType) -> Result<RunDisposition> {
             Cmd::Image { .. } => {
                 RunDisposition::OnlySupportedOn(SystemHostType::OstreeHost)
             },
+            Cmd::ConfigManager { subargs } => run_config_manager(&subargs)?,
         },
         _ => RunDisposition::Unsupported
     };
