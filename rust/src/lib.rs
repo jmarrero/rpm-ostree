@@ -949,6 +949,8 @@ mod scripts;
 pub(crate) use self::scripts::*;
 mod sysroot_upgrade;
 pub(crate) use crate::sysroot_upgrade::*;
+mod rpmmd_repos;
+pub(crate) use self::rpmmd_repos::*;
 mod rpmutils;
 pub(crate) use self::rpmutils::*;
 mod testutils;

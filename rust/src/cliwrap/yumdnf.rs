@@ -5,7 +5,7 @@ use clap::Parser;
 use indoc::indoc;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
-
+use crate::rpmmd_repos;
 use crate::ffi::SystemHostType;
 
 /// Emitted at the first line.
@@ -138,6 +138,7 @@ enum RunDisposition {
     ExecRpmOstree(Vec<String>),
     NotImplementedYet(&'static str),
     OnlySupportedOn(SystemHostType),
+    ExecInternalCode(Vec<String>),
     Unsupported,
 }
 
@@ -174,7 +175,16 @@ fn run_clean(argv: &Vec<String>) -> Result<RunDisposition> {
     }
 }
 
-fn run_config_manager(argv: &Vec<String>) -> Result<RunDisposition> {
+fn run_config_manager(argv: &Vec<String>) -> Result<RunDisposition>  {
+    let arg = if let Some(subarg) = argv.get(0) {
+        subarg
+    } else {
+        anyhow::bail!("Missing required argument");
+    };
+    match arg.as_str() {
+        "all" | "metadata" | "packages" => Ok(RunDisposition::ExecInternalCode({rpmmd_repos::main(argv)})),
+        o => anyhow::bail!("Unknown argument: {o}"),
+    }
     }
 
 fn disposition(opt: Opt, hosttype: SystemHostType) -> Result<RunDisposition> {
@@ -306,6 +316,10 @@ pub(crate) fn main(hosttype: SystemHostType, argv: &[&str]) -> Result<()> {
             Err(anyhow!("This command is only supported on {platform}"))
         }
         RunDisposition::NotImplementedYet(msg) => Err(anyhow!("{}\n{}", IMAGEBASED, msg)),
+        RunDisposition::ExecInternalCode(args) => {
+            eprintln!("{}", IMAGEBASED);
+           // Err(rpmmd_repos::main(&args))
+        }
     }
 }
 
