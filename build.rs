@@ -37,6 +37,7 @@ fn main() -> Result<()> {
     // https://github.com/rust-lang/rust/issues/47714
     println!("cargo:rustc-link-lib=dl");
     println!("cargo:rustc-link-lib=m");
+    println!("cargo:rustc-link-lib=selinux");
     system_deps::Config::new().probe()?;
     detect_fedora_feature()?;
     Ok(())
