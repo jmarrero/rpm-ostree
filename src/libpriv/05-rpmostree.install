@@ -1,6 +1,11 @@
 #!/usr/bin/bash
-# Check if install.conf is missing or does not include layout=ostree
-if [ ! -f /usr/lib/kernel/install.conf ] || ! grep -q layout=ostree /usr/lib/kernel/install.conf; then
+# Check if layout=ostree is configured via:
+# 1. KERNEL_INSTALL_LAYOUT environment variable (set by kernel-install)
+# 2. /etc/kernel/install.conf (user/distro config, takes precedence)
+# 3. /usr/lib/kernel/install.conf (vendor default)
+if [ "$KERNEL_INSTALL_LAYOUT" != "ostree" ] && \
+   ! grep -q layout=ostree /etc/kernel/install.conf 2>/dev/null && \
+   ! grep -q layout=ostree /usr/lib/kernel/install.conf 2>/dev/null; then
     exit 0
 fi
 # This is the hook that has kernel-install call into rpm-ostree kernel-install
