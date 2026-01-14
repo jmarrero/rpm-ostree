@@ -53,6 +53,14 @@ _rpmostree_shlib_ipc_send (const char *variant_type, char **args, const char *wd
   if (wd != NULL)
     g_subprocess_launcher_set_cwd (launcher, wd);
 
+  /* Unset G_MESSAGES_DEBUG to prevent debug output from libdnf/glib
+   * from corrupting the IPC communication. When G_MESSAGES_DEBUG=all is set,
+   * libdnf emits debug messages that can interfere with the variant data
+   * we receive over the socket, causing incorrect package diff results.
+   * See https://issues.redhat.com/browse/OCPBUGS-64692
+   */
+  g_subprocess_launcher_unsetenv (launcher, "G_MESSAGES_DEBUG");
+
   g_autoptr (GSocket) my_sock = g_socket_new_from_fd (my_sock_fd, error);
   if (!my_sock)
     return NULL;
