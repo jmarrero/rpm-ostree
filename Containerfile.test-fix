@@ -1,0 +1,23 @@
+# Test Containerfile for ostree-ext G_MESSAGES_DEBUG fix
+# This builds rpm-ostree with the fixed ostree-ext dependency
+
+FROM centos:stream10 as builder
+RUN mkdir /development
+WORKDIR /development
+# Enable CRB repository (contains development packages)
+RUN dnf install -y 'dnf-command(config-manager)' git && \
+    dnf config-manager --set-enabled crb
+# Clone the test branch with fixed ostree-ext dependency
+RUN git clone https://github.com/jmarrero/rpm-ostree.git && \
+    dnf builddep -y --allowerasing /development/rpm-ostree/packaging/rpm-ostree.spec && \
+    cd /development/rpm-ostree && git checkout test-ostree-ext-fix && ./ci/installdeps.sh && \
+    ./ci/install-cxx.sh && \
+    export PATH=$PATH:/development/rpm-ostree/target/cargo-vendor-filterer/bin:/development/rpm-ostree/target/cxxbridge/bin && \
+    git submodule update --init && \
+    env CFLAGS='-ggdb -Og' CXXFLAGS='-ggdb -Og' ./autogen.sh --prefix=/usr --libdir=/usr/lib64 --sysconfdir=/etc && make
+
+FROM quay.io/centos-bootc/centos-bootc:stream10
+# Install test packages FIRST - these should appear in rpmdb after rebase
+RUN dnf install -y tmux vim-enhanced strace
+# Install the rpm-ostree binary built with fixed ostree-ext LAST
+COPY --from=builder /development/rpm-ostree/target/debug/rpm-ostree /usr/bin/rpm-ostree
