@@ -8,6 +8,8 @@
 ##   # Needs internet access for package installation and koji access
 ##   tags: "needs-internet platform-independent"
 ##   minMemory: 2048
+##   # Need extra disk for multiple container builds and ostree deployments
+##   minDisk: 20
 #
 # Copyright (C) 2025 Red Hat, Inc.
 #
@@ -68,6 +70,8 @@ build_derived_image() {
   ostree container encapsulate --repo=/ostree/repo "${checksum}" \
     "${image}" --label ostree.bootable=TRUE
 
+  # Clean up any previous container images to free disk space
+  podman rmi --all --force 2>/dev/null || true
   skopeo copy "${image}" containers-storage:localhost/fcos
   rm -rf "${image_dir}"
 
