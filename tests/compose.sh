@@ -3,7 +3,7 @@ set -euo pipefail
 
 # freeze on a specific commit for tests for reproducibility and since it should
 # always work to target older treefiles
-FEDORA_COREOS_CONFIG_COMMIT=0661e4edc55d4f5293ba463c9dec0471b84d05d4
+FEDORA_COREOS_CONFIG_COMMIT=932185829a451812a6f627f7937f49fe3bf952be
 
 dn=$(cd "$(dirname "$0")" && pwd)
 topsrcdir=$(cd "$dn/.." && pwd)
@@ -50,7 +50,7 @@ if [ ! -d compose-cache ]; then
   # default; we'll want it to test `install-langs`. This also means that we have
   # to add updates-archive to the repo list.
   # Also neuter OSTree layers; we don't re-implement cosa's auto-layering sugar
-  curl -Lf --retry 3 -O https://src.fedoraproject.org/rpms/fedora-repos/raw/f42/f/fedora-updates-archive.repo
+  curl -Lf --retry 3 -O https://src.fedoraproject.org/rpms/fedora-repos/raw/f43/f/fedora-updates-archive.repo
   python3 -c '
 import sys, json
 y = json.load(sys.stdin)
