@@ -35,6 +35,8 @@ vm_build_rpm nonrootcap \
     build "echo nrc.conf > nrc.conf
            for mode in none user group caps{,-setuid} usergroup{,caps{,-setuid}}; do
                cp nonrootcap nrc-\$mode.sh
+               # Keep files with different inode metadata out of brp-linkdupes.
+               echo \"# \$mode\" >> nrc-\$mode.sh
            done" \
     pre "groupadd -r nrcgroup
          useradd -r nrcuser -s /sbin/nologin" \
