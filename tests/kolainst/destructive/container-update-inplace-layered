@@ -1,0 +1,79 @@
+#!/bin/bash
+# kola: { "timeoutMin": 30, "minDisk": 20, "minMemory": 4096 }
+# SPDX-License-Identifier: LGPL-2.0-or-later
+
+set -euo pipefail
+
+. "${KOLA_EXT_DATA}/libtest.sh"
+
+set -x
+
+cd "$(mktemp -d)"
+arch=$(arch)
+marker=/usr/share/deploy-from-self-layered
+config=/etc/deploy-from-self-layered.conf
+runtime_marker=/usr/share/deploy-from-self-runtime
+
+case "${AUTOPKGTEST_REBOOT_MARK:-}" in
+  "")
+    libtest_prepare_offline
+    systemctl mask --now zincati
+    if rpm -q foo; then
+      fatal "foo must not be present in the base image"
+    fi
+    assert_not_has_file "${marker}"
+    assert_not_has_file "${config}"
+    assert_not_has_file "${runtime_marker}"
+
+    checksum=$(rpm-ostree status --json | jq -r '.deployments[0].checksum')
+    ostree container encapsulate --repo=/ostree/repo "${checksum}" \
+      containers-storage:localhost/deploy-from-self-base --label ostree.bootable=TRUE
+    cp "${KOLA_EXT_DATA}/rpm-repos/0/packages/${arch}/foo-1.2-3.${arch}.rpm" foo.rpm
+    cat > Dockerfile <<'EOF'
+FROM localhost/deploy-from-self-base
+COPY foo.rpm /tmp/foo.rpm
+RUN rm -f /etc/yum.repos.d/*.repo && \
+    rpm-ostree install /tmp/foo.rpm && rm /tmp/foo.rpm && \
+    echo 'first layer' > /usr/share/deploy-from-self-layered
+RUN echo 'second layer' > /usr/share/deploy-from-self-layered && \
+    echo 'derived configuration' > /etc/deploy-from-self-layered.conf
+EOF
+    # Keep the additions outside the embedded OSTree commit, as in a derived
+    # OpenShift node image. No registry or distribution repositories are needed.
+    image=localhost/deploy-from-self-layered
+    podman build --network=none --layers -t "${image}" .
+    podman run --rm "${image}" rpm -q foo
+    podman run --rm "${image}" cat "${marker}" > marker.txt
+    assert_streq "$(cat marker.txt)" 'second layer'
+
+    # Call this directly: old skopeo only makes MCO select this code path;
+    # it is not required to trigger the loss of derived layers here.
+    # The running container's temporary changes must not enter the deployment.
+    podman run --privileged --pid=host --net=host --rm -v /:/run/host \
+      "${image}" sh -ec 'echo runtime > /usr/share/deploy-from-self-runtime
+        exec rpm-ostree ex deploy-from-self /run/host'
+
+    # The old implementation silently deployed only the embedded base commit.
+    # Check the staged tree as well as the package list before rebooting.
+    rpmostree_assert_status '.deployments[0].staged'
+    staged=$(rpm-ostree status --json | jq -r '.deployments[0].checksum')
+    ostree cat "${staged}" "${marker}" > marker.txt
+    assert_streq "$(cat marker.txt)" 'second layer'
+    ostree ls "${staged}" /usr/share > share.txt
+    assert_not_file_has_content_literal share.txt "${runtime_marker}"
+    rpm-ostree db list "${staged}" > packages.txt
+    assert_file_has_content_literal packages.txt "foo-1.2-3.${arch}"
+
+    /tmp/autopkgtest-reboot layered
+    ;;
+  layered)
+    assert_streq "$(cat "${marker}")" 'second layer'
+    assert_streq "$(cat "${config}")" 'derived configuration'
+    assert_streq "$(rpm -q foo)" "foo-1.2-3.${arch}"
+    assert_streq "$(/usr/bin/foo)" "foo-1.2-3.${arch}"
+    assert_not_has_file "${runtime_marker}"
+    matchpathcon -V "${marker}" /usr/bin/foo
+    echo 'ok container-update-inplace-layered'
+    ;;
+  *) echo "unexpected mark: ${AUTOPKGTEST_REBOOT_MARK}"; exit 1;;
+esac
