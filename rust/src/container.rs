@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufReader;
 use std::num::NonZeroU32;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
@@ -667,7 +667,10 @@ struct UpdateFromRunningOpts {
 fn containerenv_field(field: &str) -> Option<String> {
     let contents = std::fs::read_to_string("/run/.containerenv").ok()?;
     let prefix = format!("{field}=");
-    let value = contents.lines().find_map(|line| line.strip_prefix(&prefix))?.trim();
+    let value = contents
+        .lines()
+        .find_map(|line| line.strip_prefix(&prefix))?
+        .trim();
     let value = value
         .strip_prefix('"')
         .and_then(|v| v.strip_suffix('"'))
@@ -675,27 +678,77 @@ fn containerenv_field(field: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_owned())
 }
 
-/// Mount the running container's rootfs through the host Podman store.
-fn mount_running_container_rootfs(target_root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
-    let Some(container_id) = containerenv_field("id") else {
+struct MountedContainerImage {
+    target_root: Utf8PathBuf,
+    image_id: String,
+    path: Utf8PathBuf,
+    mounted: bool,
+}
+
+impl MountedContainerImage {
+    fn unmount_inner(&mut self) -> Result<()> {
+        if !std::mem::replace(&mut self.mounted, false) {
+            return Ok(());
+        }
+        Command::new("chroot")
+            .args([
+                self.target_root.as_str(),
+                "/usr/bin/podman",
+                "image",
+                "unmount",
+                self.image_id.as_str(),
+            ])
+            .stdout(Stdio::null())
+            .run()
+            .context("Unmounting the container image with host Podman")
+    }
+
+    fn unmount(mut self) -> Result<()> {
+        self.unmount_inner()
+    }
+}
+
+impl Drop for MountedContainerImage {
+    fn drop(&mut self) {
+        if let Err(e) = self.unmount_inner() {
+            tracing::warn!("Failed to unmount container image: {e:#}");
+        }
+    }
+}
+
+/// Mount the backing image, not the live container with its runtime mounts and
+/// writable layer. Use the immutable image ID from Podman rather than a tag.
+fn mount_container_image(target_root: &Utf8Path) -> Result<Option<MountedContainerImage>> {
+    if containerenv_field("id").is_none() {
         return Ok(None);
-    };
+    }
+    let image_id =
+        containerenv_field("imageid").context("Missing image ID in /run/.containerenv")?;
     let mut output = Command::new("chroot")
         .args([
             target_root.as_str(),
             "/usr/bin/podman",
+            "image",
             "mount",
-            container_id.as_str(),
+            image_id.as_str(),
         ])
         .run_get_output()
-        .context("Mounting the running container rootfs with host Podman")?;
+        .context("Mounting the container image with host Podman")?;
+    // Balance Podman's mount counter even if parsing or importing fails.
+    let mut mounted_image = MountedContainerImage {
+        target_root: target_root.to_owned(),
+        image_id,
+        path: Utf8PathBuf::new(),
+        mounted: true,
+    };
     let mut path = String::new();
     output.read_to_string(&mut path)?;
     let path = Utf8Path::new(path.trim());
     if !path.is_absolute() {
         anyhow::bail!("Podman returned a non-absolute rootfs path: {path}");
     }
-    Ok(Some(target_root.join(path.strip_prefix("/")?)))
+    mounted_image.path = target_root.join(path.strip_prefix("/")?);
+    Ok(Some(mounted_image))
 }
 
 // This reimplements https://github.com/ostreedev/ostree/pull/2691 basically
@@ -793,9 +846,9 @@ pub(crate) fn deploy_from_self_entrypoint(args: Vec<String>) -> CxxResult<()> {
             .context("Pulling from embedded repo")?;
     }
 
-    if let Some(rootfs_path) = mount_running_container_rootfs(&opts.target_root)? {
-        let rootfs = Dir::open_ambient_dir(&rootfs_path, cap_std::ambient_authority())
-            .with_context(|| format!("Opening merged rootfs at {rootfs_path}"))?;
+    if let Some(mounted_image) = mount_container_image(&opts.target_root)? {
+        let rootfs = Dir::open_ambient_dir(&mounted_image.path, cap_std::ambient_authority())
+            .with_context(|| format!("Opening merged rootfs at {}", mounted_image.path))?;
         let (base_commit, _) = src_repo.load_commit(commit)?;
         let base_metadata = base_commit.child_value(0);
         let metadata = glib::VariantDict::new(Some(&base_metadata));
@@ -809,6 +862,8 @@ pub(crate) fn deploy_from_self_entrypoint(args: Vec<String>) -> CxxResult<()> {
             commit,
             &metadata,
         )?;
+        drop(rootfs);
+        mounted_image.unmount()?;
         println!("Imported merged filesystem: {merge_commit}");
         Command::new("chroot")
             .args([
