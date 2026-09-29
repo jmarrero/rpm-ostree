@@ -998,6 +998,55 @@ fn postprocess_mtree(repo: &ostree::Repo, rootfs: &ostree::MutableTree) -> Resul
     Ok(())
 }
 
+/// Generate a deployment commit from the merged image, excluding its embedded
+/// repository. Import from the filesystem root so SELinux sees absolute paths
+/// such as /usr/share rather than paths relative to each top-level directory.
+#[context("Generating deployment commit from rootfs")]
+pub(crate) fn generate_deploy_commit_from_rootfs(
+    repo: &ostree::Repo,
+    rootfs: &Dir,
+    parent: &str,
+    metadata: &glib::Variant,
+) -> Result<String> {
+    let cancellable = gio::Cancellable::NONE;
+    let tx = repo.auto_transaction(cancellable)?;
+    let policy = ostree::SePolicy::new_at(rootfs.as_fd().as_raw_fd(), cancellable)?;
+    let modifier = ostree::RepoCommitModifier::new(
+        ostree::RepoCommitModifierFlags::empty(),
+        Some(Box::new(|_, path, _| {
+            // Keep these mount points, but do not import their contents.
+            if path.starts_with("/ostree/") || path.starts_with("/sysroot/") {
+                ostree::RepoCommitFilterResult::Skip
+            } else {
+                ostree::RepoCommitFilterResult::Allow
+            }
+        })),
+    );
+    modifier.set_sepolicy(Some(&policy));
+    let mtree = ostree::MutableTree::new();
+    repo.write_dfd_to_mtree(
+        rootfs.as_fd().as_raw_fd(),
+        ".",
+        &mtree,
+        Some(&modifier),
+        cancellable,
+    )?;
+    postprocess_mtree(repo, &mtree)?;
+    let root = repo.write_mtree(&mtree, cancellable)?;
+    let root = root.downcast_ref::<ostree::RepoFile>().unwrap();
+    let commit = repo.write_commit_with_time(
+        Some(parent),
+        None,
+        None,
+        Some(metadata),
+        root,
+        0,
+        cancellable,
+    )?;
+    tx.commit(cancellable)?;
+    Ok(commit.into())
+}
+
 #[context("Generating commit from rootfs")]
 fn generate_commit_from_rootfs(
     repo: &ostree::Repo,
